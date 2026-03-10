@@ -3,13 +3,25 @@ import { CreateOrchestratorDto } from './dto/create-orchestrator.dto';
 import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
-
+import { execSync } from 'child_process'
 
 
 // ToDo -> Estructura de proyecto devolver al front
 
 @Injectable()
 export class OrchestratorService {
+
+  private kc: k8s.KubeConfig;
+  private batchApi: k8s.BatchV1Api;
+  private coreApi: k8s.CoreV1Api;
+
+  constructor() {
+    this.kc = new k8s.KubeConfig();
+    this.kc.loadFromFile('/home/tulio/.config/.kube/config');
+    this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
+    this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+  }
+
 
   private readProjectAsJson(dirPath: string) {
 
@@ -38,15 +50,8 @@ export class OrchestratorService {
 
   async create(createOrchestratorDto: CreateOrchestratorDto) {
 
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault();
+    const jobName = `maven-generator-${Date.now()}`
 
-    const k8sApi = kc.makeApiClient(k8s.BatchV1Api);
-    const coreApi = kc.makeApiClient(k8s.CoreV1Api);
-
-
-    const jobName = 'maven-generator'
-    const output = '/output/'
 
     const deployment: k8s.V1Job = {
       apiVersion: 'batch/v1',
@@ -55,13 +60,15 @@ export class OrchestratorService {
         name: jobName,
       },
       spec: {
+        ttlSecondsAfterFinished: 60,
         template: {
           metadata: {
             labels: {
-              job: createOrchestratorDto.container_id,
+              job: jobName,
             },
           },
           spec: {
+            restartPolicy: 'Never',
             containers: [
               {
                 name: createOrchestratorDto.container_id,
@@ -75,21 +82,6 @@ export class OrchestratorService {
                   createOrchestratorDto.java_version,
                   createOrchestratorDto.spring_version
                 ],
-                volumeMounts: [
-                  {
-                    name: 'maven-output',
-                    mountPath: '/output',
-                  },
-                ],
-              },
-            ],
-            restartPolicy: 'Never',
-            volumes: [
-              {
-                name: 'maven-output',
-                persistentVolumeClaim: {
-                  claimName: 'maven-output-pvc',
-                },
               },
             ],
           },
@@ -97,7 +89,7 @@ export class OrchestratorService {
       },
     };
     try {
-      const response = await k8sApi.createNamespacedJob({
+      const response = await this.batchApi.createNamespacedJob({
         namespace: 'default',
         body: deployment,
       });
@@ -105,9 +97,13 @@ export class OrchestratorService {
       throw error;
     }
 
-    await this.waitForJobCompletion(jobName, k8sApi, coreApi);
+    await this.waitForJobCompletion(jobName);
 
-    const projectTree = this.readProjectAsJson(output);
+    const podName = await this.getPodFromJob(jobName);
+
+    const localProjectPath = this.copyOutputFromPod(podName);
+
+    const projectTree = this.readProjectAsJson(localProjectPath);
 
     return {
       status: 'success',
@@ -115,12 +111,12 @@ export class OrchestratorService {
     };
   }
 
-  async waitForJobCompletion(jobName: string, k8sApi: k8s.BatchV1Api, coreApi: k8s.CoreV1Api, maxRetries = 30): Promise<void> {
+  async waitForJobCompletion(jobName: string, maxRetries = 90): Promise<void> {
 
     for (let i = 0; i < maxRetries; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 5000));
 
-      const job = await k8sApi.readNamespacedJob({
+      const job = await this.batchApi.readNamespacedJob({
         name: jobName,
         namespace: 'default',
       });
@@ -131,6 +127,36 @@ export class OrchestratorService {
 
     throw new Error('Job Timeout');
 
+  }
+
+  async getPodFromJob(jobName: string): Promise<string> {
+
+    const pods = await this.coreApi.listNamespacedPod({
+      namespace: 'default',
+      labelSelector: `job-name=${jobName}`
+    });
+
+    const pod = pods.items[0];
+
+    if (!pod) {
+      throw new Error("Pod not found for job");
+    }
+
+    return pod.metadata!.name!;
+
+  }
+
+  private copyOutputFromPod(podName: string) {
+
+    const localPath = `/tmp/project-${Date.now()}`;
+
+
+    execSync(
+      `kubectl cp default/${podName}:/output ${localPath}`
+    );
+
+
+    return localPath;
   }
 
 }
