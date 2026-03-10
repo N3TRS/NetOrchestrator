@@ -6,4 +6,4 @@ import { OrchestratorController } from './orchestrator.controller';
   controllers: [OrchestratorController],
   providers: [OrchestratorService],
 })
-export class OrchestratorModule {}
+export class OrchestratorModule { }

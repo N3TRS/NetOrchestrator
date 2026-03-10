@@ -58,7 +58,7 @@ export class OrchestratorService {
         template: {
           metadata: {
             labels: {
-              job: createOrchestratorDto.name,
+              job: createOrchestratorDto.container_id,
             },
           },
           spec: {
