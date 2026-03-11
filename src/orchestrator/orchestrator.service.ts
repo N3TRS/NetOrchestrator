@@ -3,7 +3,6 @@ import { CreateOrchestratorDto } from './dto/create-orchestrator.dto';
 import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process'
 
 
 // ToDo -> Estructura de proyecto devolver al front
@@ -17,7 +16,7 @@ export class OrchestratorService {
 
   constructor() {
     this.kc = new k8s.KubeConfig();
-    this.kc.loadFromFile('/home/tulio/.config/.kube/config');
+    this.kc.loadFromFile('/home/tulio/.kube/config');
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
     this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
   }
@@ -51,7 +50,7 @@ export class OrchestratorService {
   async create(createOrchestratorDto: CreateOrchestratorDto) {
 
     const jobName = `maven-generator-${Date.now()}`
-
+    const hostOutputPath = `/tmp/k3s-outputs/${jobName}`;
 
     const deployment: k8s.V1Job = {
       apiVersion: 'batch/v1',
@@ -82,6 +81,21 @@ export class OrchestratorService {
                   createOrchestratorDto.java_version,
                   createOrchestratorDto.spring_version
                 ],
+                volumeMounts: [
+                  {
+                    name: 'output-vol',
+                    mountPath: '/output',
+                  },
+                ],
+              },
+            ],
+            volumes: [
+              {
+                name: 'output-vol',
+                hostPath: {
+                  path: hostOutputPath,
+                  type: 'DirectoryOrCreate',
+                },
               },
             ],
           },
@@ -99,11 +113,9 @@ export class OrchestratorService {
 
     await this.waitForJobCompletion(jobName);
 
-    const podName = await this.getPodFromJob(jobName);
+    const projectTree = this.readProjectAsJson(hostOutputPath);
 
-    const localProjectPath = this.copyOutputFromPod(podName);
-
-    const projectTree = this.readProjectAsJson(localProjectPath);
+    fs.rmSync(hostOutputPath, { recursive: true, force: true });
 
     return {
       status: 'success',
@@ -144,19 +156,6 @@ export class OrchestratorService {
 
     return pod.metadata!.name!;
 
-  }
-
-  private copyOutputFromPod(podName: string) {
-
-    const localPath = `/tmp/project-${Date.now()}`;
-
-
-    execSync(
-      `kubectl cp default/${podName}:/output ${localPath}`
-    );
-
-
-    return localPath;
   }
 
 }
