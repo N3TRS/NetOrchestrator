@@ -12,13 +12,11 @@ export class OrchestratorService {
 
   private kc: k8s.KubeConfig;
   private batchApi: k8s.BatchV1Api;
-  private coreApi: k8s.CoreV1Api;
 
   constructor() {
     this.kc = new k8s.KubeConfig();
     this.kc.loadFromFile('/home/tulio/.kube/config');
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
-    this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
   }
 
 
@@ -138,23 +136,6 @@ export class OrchestratorService {
     }
 
     throw new Error('Job Timeout');
-
-  }
-
-  async getPodFromJob(jobName: string): Promise<string> {
-
-    const pods = await this.coreApi.listNamespacedPod({
-      namespace: 'default',
-      labelSelector: `job-name=${jobName}`
-    });
-
-    const pod = pods.items[0];
-
-    if (!pod) {
-      throw new Error("Pod not found for job");
-    }
-
-    return pod.metadata!.name!;
 
   }
 
