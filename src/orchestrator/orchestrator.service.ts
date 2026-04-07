@@ -27,6 +27,7 @@ export class OrchestratorService {
         name: jobName,
       },
       spec: {
+        backoffLimit: 0,
         ttlSecondsAfterFinished: 120,
         template: {
           metadata: {
@@ -39,9 +40,10 @@ export class OrchestratorService {
             containers: [
               {
                 name: containerName,
-                image: 'tulio3101/omni-maven',
+                image: 'tulio3101/omni-maven:v3',
+                imagePullPolicy: 'Always',
                 args: [
-                  runProjectDto.URL
+                  runProjectDto.REPO_URL
                 ],
                 volumeMounts: [
                   {
@@ -87,31 +89,66 @@ export class OrchestratorService {
             labelSelector: `job-name=${jobName}`
           });
 
-          const pod = pods.items[0];
-          if (!pod || !pod.metadata?.name) {
-            setTimeout(() => streamLogs(), 1500)
+
+          if (!pods.items || pods.items.length === 0) {
+            console.log("Pod not yet");
+            setTimeout(() => streamLogs(), 3500);
             return;
           }
 
-          if (pod.status?.phase === 'Pending') {
+          const pod = pods.items[0];
+          const podName = pod.metadata?.name;
+          const containerName = pod.spec?.containers?.[0]?.name;
+
+          if (!podName || !containerName) {
+            setTimeout(() => streamLogs(), 1500);
+            return;
+          }
+
+          const phase = pod.status?.phase;
+
+          if (phase === 'Pending') {
             setTimeout(() => streamLogs(), 2000);
             return;
           }
 
-          await log.log(
-            'default',
-            pod.metadata?.name,
-            'runner',
-            {
-              write: (chunk: Buffer) => {
-                observer.next({ data: chunk.toString() } as MessageEvent);
-              },
-            } as any,
-            { follow: true, timestamps: false }
-          );
-
+          if (phase === 'Running') {
+            try {
+              await log.log(
+                'default',
+                podName,
+                containerName,
+                {
+                  write: (chunk: Buffer) => {
+                    observer.next({ data: chunk.toString() } as MessageEvent);
+                  },
+                } as any,
+                { follow: true, timestamps: false }
+              );
+              observer.complete();
+            } catch {
+              setTimeout(() => streamLogs(), 1000);
+            }
+            return;
+          }
+          try {
+            const logsResponse = await coreApi.readNamespacedPodLog({
+              name: podName,
+              namespace: 'default',
+              container: containerName,
+              follow: false,
+            });
+            observer.next({ data: logsResponse } as MessageEvent);
+            observer.complete();
+          } catch (logError) {
+            console.error('Error reading final logs: ', logError?.message);
+            observer.next({ data: `[ERROR reading logs] ${logError?.message}` } as MessageEvent);
+            observer.complete();
+          }
         } catch (error) {
-          observer.error(error);
+          console.error('Log streaming error message:', error?.message);
+          observer.next({ data: `[ERROR] ${error.message}` } as MessageEvent);
+          observer.complete();
         }
       };
 

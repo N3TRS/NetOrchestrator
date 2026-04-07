@@ -7,10 +7,7 @@ import { Observable } from 'rxjs'
 
 @Controller("orchestrator")
 export class OrchestratorController {
-  constructor(
-    private readonly orchestratorService: OrchestratorService,
-    private readonly runProjectDto: CreateRunOrchestratorDto,
-  ) { }
+  constructor(private readonly orchestratorService: OrchestratorService) { }
 
   @Post("run")
   runProject(@Body() runProjectDto: CreateRunOrchestratorDto) {
