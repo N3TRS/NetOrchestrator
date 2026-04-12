@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { CreateOrchestratorDto } from "./dto/create-orchestrator.dto";
 import * as k8s from "@kubernetes/client-node";
-import * as fs from "fs";
-import * as path from "path";
+import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
+import { Observable } from 'rxjs';
+
 
 @Injectable()
 export class OrchestratorService {
@@ -15,42 +15,20 @@ export class OrchestratorService {
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
   }
 
-  private readProjectAsJson(dirPath: string) {
-    const result: Record<string, any> = {};
-    const items = fs.readdirSync(dirPath);
+  async runningProject(runProjectDto: CreateRunOrchestratorDto) {
 
-    items.forEach((item) => {
-      const fullPath = path.join(dirPath, item);
-      const stat = fs.statSync(fullPath);
-
-      if (stat.isDirectory()) {
-        result[item] = {
-          type: "directory",
-          children: this.readProjectAsJson(fullPath),
-        };
-      } else {
-        result[item] = {
-          type: "file",
-          content: fs.readFileSync(fullPath, "utf8"),
-        };
-      }
-    });
-
-    return result;
-  }
-
-  async create(createOrchestratorDto: CreateOrchestratorDto) {
     const jobName = `maven-generator-${Date.now()}`;
-    const hostOutputPath = `/tmp/k3s-outputs/${jobName}`;
+    const containerName = 'maven-runner';
 
     const deployment: k8s.V1Job = {
-      apiVersion: "batch/v1",
-      kind: "Job",
+      apiVersion: 'batch/v1',
+      kind: 'Job',
       metadata: {
         name: jobName,
       },
       spec: {
-        ttlSecondsAfterFinished: 60,
+        backoffLimit: 0,
+        ttlSecondsAfterFinished: 120,
         template: {
           metadata: {
             labels: {
@@ -58,120 +36,125 @@ export class OrchestratorService {
             },
           },
           spec: {
-            restartPolicy: "Never",
-            initContainers: [
-              {
-                name: "cleanup",
-                image: "busybox",
-                command: ["sh", "-c", `rm -rf /output/* || true`],
-                volumeMounts: [{ name: "output-vol", mountPath: "/output" }],
-              },
-            ],
+            restartPolicy: 'Never',
             containers: [
               {
-                name: createOrchestratorDto.containerId,
-                image: "tulio3101/maven-generator:v2",
+                name: containerName,
+                image: 'tulio3101/omni-maven:v3',
+                imagePullPolicy: 'Always',
                 args: [
-                  createOrchestratorDto.group,
-                  createOrchestratorDto.artifact,
-                  createOrchestratorDto.name,
-                  createOrchestratorDto.description,
-                  createOrchestratorDto.package_name,
-                  createOrchestratorDto.javaVersion,
-                  createOrchestratorDto.springVersion,
+                  runProjectDto.REPO_URL
                 ],
                 volumeMounts: [
                   {
-                    name: "output-vol",
-                    mountPath: "/output",
+                    name: 'output-vol',
+                    mountPath: '/output',
                   },
                 ],
               },
             ],
             volumes: [
-              {
-                name: "output-vol",
-                hostPath: {
-                  path: hostOutputPath,
-                  type: "DirectoryOrCreate",
-                },
-              },
-            ],
+              { name: 'output-vol', emptyDir: {} }
+            ]
           },
         },
       },
     };
+
     try {
       const response = await this.batchApi.createNamespacedJob({
-        namespace: "default",
+        namespace: 'default',
         body: deployment,
       });
+
+      return {
+        message: "Job created",
+        jobName: jobName
+      }
+
     } catch (error) {
       throw error;
     }
-
-    await this.waitForJobCompletion(jobName);
-
-    const projectTree = this.readProjectAsJson(hostOutputPath);
-
-    await this.cleanupOutputDir(jobName, hostOutputPath);
-
-    return {
-      status: "success",
-      project: projectTree,
-    };
   }
 
-  async waitForJobCompletion(jobName: string, maxRetries = 90): Promise<void> {
-    for (let i = 0; i < maxRetries; i++) {
-      await new Promise((r) => setTimeout(r, 5000));
+  getJobLogs(jobName: string): Observable<MessageEvent> {
+    return new Observable((observer) => {
+      const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+      const log = new k8s.Log(this.kc);
 
-      const job = await this.batchApi.readNamespacedJob({
-        name: jobName,
-        namespace: "default",
-      });
+      const streamLogs = async () => {
+        try {
+          const pods = await coreApi.listNamespacedPod({
+            namespace: 'default',
+            labelSelector: `job-name=${jobName}`
+          });
 
-      if (job.status?.succeeded === 1) return;
-      if (job.status?.failed === 1) throw new Error(`Job ${jobName} failed`);
-    }
 
-    throw new Error("Job Timeout");
-  }
+          if (!pods.items || pods.items.length === 0) {
+            console.log("Pod not yet");
+            setTimeout(() => streamLogs(), 3500);
+            return;
+          }
 
-  private async cleanupOutputDir(
-    jobName: string,
-    hostOutputPath: string,
-  ): Promise<void> {
-    const cleanupJob: k8s.V1Job = {
-      apiVersion: "batch/v1",
-      kind: "Job",
-      metadata: { name: `cleanup-${jobName}` },
-      spec: {
-        ttlSecondsAfterFinished: 30,
-        template: {
-          spec: {
-            restartPolicy: "Never",
-            containers: [
-              {
-                name: "cleanup",
-                image: "busybox",
-                command: ["sh", "-c", `rm -rf /output`],
-                volumeMounts: [{ name: "output-vol", mountPath: "/output" }],
-              },
-            ],
-            volumes: [
-              {
-                name: "output-vol",
-                hostPath: { path: hostOutputPath, type: "Directory" },
-              },
-            ],
-          },
-        },
-      },
-    };
-    await this.batchApi.createNamespacedJob({
-      namespace: "default",
-      body: cleanupJob,
+          const pod = pods.items[0];
+          const podName = pod.metadata?.name;
+          const containerName = pod.spec?.containers?.[0]?.name;
+
+          if (!podName || !containerName) {
+            setTimeout(() => streamLogs(), 1500);
+            return;
+          }
+
+          const phase = pod.status?.phase;
+
+          if (phase === 'Pending') {
+            setTimeout(() => streamLogs(), 2000);
+            return;
+          }
+
+          if (phase === 'Running') {
+            try {
+              await log.log(
+                'default',
+                podName,
+                containerName,
+                {
+                  write: (chunk: Buffer) => {
+                    observer.next({ data: chunk.toString() } as MessageEvent);
+                  },
+                } as any,
+                { follow: true, timestamps: false }
+              );
+              observer.complete();
+            } catch {
+              setTimeout(() => streamLogs(), 1000);
+            }
+            return;
+          }
+          try {
+            const logsResponse = await coreApi.readNamespacedPodLog({
+              name: podName,
+              namespace: 'default',
+              container: containerName,
+              follow: false,
+            });
+            observer.next({ data: logsResponse } as MessageEvent);
+            observer.complete();
+          } catch (logError) {
+            console.error('Error reading final logs: ', logError?.message);
+            observer.next({ data: `[ERROR reading logs] ${logError?.message}` } as MessageEvent);
+            observer.complete();
+          }
+        } catch (error) {
+          console.error('Log streaming error message:', error?.message);
+          observer.next({ data: `[ERROR] ${error.message}` } as MessageEvent);
+          observer.complete();
+        }
+      };
+
+      streamLogs();
+
     });
   }
+
 }
