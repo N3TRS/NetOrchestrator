@@ -1,7 +1,6 @@
 import { Controller, Param, Post, Body, Sse } from "@nestjs/common";
 import { OrchestratorService } from "./orchestrator.service";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
-import { Observable } from 'rxjs'
 
 
 
@@ -14,8 +13,4 @@ export class OrchestratorController {
     return this.orchestratorService.runningProject(runProjectDto);
   }
 
-  @Sse('logs/:jobName')
-  streamsLogs(@Param('jobName') jobName: string): Observable<MessageEvent> {
-    return this.orchestratorService.getJobLogs(jobName);
-  }
 }

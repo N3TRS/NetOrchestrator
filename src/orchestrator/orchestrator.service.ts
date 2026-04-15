@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import * as k8s from "@kubernetes/client-node";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
 import { Observable } from 'rxjs';
-
+import { Socket } from 'socket.io';
 
 @Injectable()
 export class OrchestratorService {
@@ -28,7 +28,7 @@ export class OrchestratorService {
       },
       spec: {
         backoffLimit: 0,
-        ttlSecondsAfterFinished: 120,
+        ttlSecondsAfterFinished: 1800,
         template: {
           metadata: {
             labels: {
@@ -77,84 +77,82 @@ export class OrchestratorService {
     }
   }
 
-  getJobLogs(jobName: string): Observable<MessageEvent> {
-    return new Observable((observer) => {
-      const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
-      const log = new k8s.Log(this.kc);
+  async streamLogsToSocket(client: Socket, jobName: string): Promise<void> {
+    const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+    const log = new k8s.Log(this.kc);
 
-      const streamLogs = async () => {
-        try {
-          const pods = await coreApi.listNamespacedPod({
-            namespace: 'default',
-            labelSelector: `job-name=${jobName}`
-          });
+    const streamLogs = async () => {
+      try {
+        const pods = await coreApi.listNamespacedPod({
+          namespace: 'default',
+          labelSelector: `job-name=${jobName}`
+        });
 
-
-          if (!pods.items || pods.items.length === 0) {
-            console.log("Pod not yet");
-            setTimeout(() => streamLogs(), 3500);
-            return;
-          }
-
-          const pod = pods.items[0];
-          const podName = pod.metadata?.name;
-          const containerName = pod.spec?.containers?.[0]?.name;
-
-          if (!podName || !containerName) {
-            setTimeout(() => streamLogs(), 1500);
-            return;
-          }
-
-          const phase = pod.status?.phase;
-
-          if (phase === 'Pending') {
-            setTimeout(() => streamLogs(), 2000);
-            return;
-          }
-
-          if (phase === 'Running') {
-            try {
-              await log.log(
-                'default',
-                podName,
-                containerName,
-                {
-                  write: (chunk: Buffer) => {
-                    observer.next({ data: chunk.toString() } as MessageEvent);
-                  },
-                } as any,
-                { follow: true, timestamps: false }
-              );
-              observer.complete();
-            } catch {
-              setTimeout(() => streamLogs(), 1000);
-            }
-            return;
-          }
-          try {
-            const logsResponse = await coreApi.readNamespacedPodLog({
-              name: podName,
-              namespace: 'default',
-              container: containerName,
-              follow: false,
-            });
-            observer.next({ data: logsResponse } as MessageEvent);
-            observer.complete();
-          } catch (logError) {
-            console.error('Error reading final logs: ', logError?.message);
-            observer.next({ data: `[ERROR reading logs] ${logError?.message}` } as MessageEvent);
-            observer.complete();
-          }
-        } catch (error) {
-          console.error('Log streaming error message:', error?.message);
-          observer.next({ data: `[ERROR] ${error.message}` } as MessageEvent);
-          observer.complete();
+        if (!pods.items || pods.items.length === 0) {
+          console.log("Pod not yet");
+          setTimeout(() => streamLogs(), 3500);
+          return;
         }
-      };
 
-      streamLogs();
+        const pod = pods.items[0];
+        const podName = pod.metadata?.name;
+        const containerName = pod.spec?.containers?.[0]?.name;
 
-    });
+        if (!podName || !containerName) {
+          setTimeout(() => streamLogs(), 1500);
+          return;
+        }
+
+        const phase = pod.status?.phase;
+
+        if (phase === 'Pending') {
+          setTimeout(() => streamLogs(), 2000);
+          return;
+        }
+
+        if (phase === 'Running') {
+          try {
+            await log.log(
+              'default',
+              podName,
+              containerName,
+              {
+                write: (chunk: Buffer) => {
+                  client.emit('logs:data', chunk.toString());
+                },
+              } as any,
+              {
+                follow: true, timestamps: false
+              }
+            );
+            client.emit('logs:complete');
+          } catch (error) {
+            console.error('Error streaming live logs: ', error?.message);
+            setTimeout(() => streamLogs(), 1000);
+          }
+          return;
+        }
+        try {
+          const logsReponse = await coreApi.readNamespacedPodLog({
+            name: podName,
+            namespace: 'default',
+            container: containerName,
+            follow: false,
+          });
+          client.emit('logs:data', logsReponse);
+          client.emit('logs:complete');
+        } catch (logError) {
+          console.error('Error reading final logs: ', logError?.message);
+          client.emit('logs:error', { message: `Error reading logs: ${logError?.message}` });
+        }
+      } catch (error) {
+        console.error('Log streaming error message:', error?.message);
+        client.emit('logs:error', { message: error?.message || 'Unknown error ' });
+      }
+    };
+
+    streamLogs();
+
   }
 
 }
