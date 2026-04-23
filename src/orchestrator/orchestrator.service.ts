@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import * as k8s from "@kubernetes/client-node";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
-import { Observable } from 'rxjs';
 import { Socket } from 'socket.io';
 
 @Injectable()
@@ -28,7 +27,7 @@ export class OrchestratorService {
       },
       spec: {
         backoffLimit: 0,
-        ttlSecondsAfterFinished: 1800,
+        ttlSecondsAfterFinished: 600,
         template: {
           metadata: {
             labels: {
@@ -40,7 +39,7 @@ export class OrchestratorService {
             containers: [
               {
                 name: containerName,
-                image: 'tulio3101/omni-maven:v3',
+                image: `tulio3101/omni-maven-${runProjectDto.JAVA_VERSION}:v1`,
                 imagePullPolicy: 'Always',
                 args: [
                   runProjectDto.REPO_URL
@@ -50,11 +49,22 @@ export class OrchestratorService {
                     name: 'output-vol',
                     mountPath: '/output',
                   },
+                  {
+                    name: 'maven-cache',
+                    mountPath: '/root/.m2'
+                  }
                 ],
               },
             ],
             volumes: [
-              { name: 'output-vol', emptyDir: {} }
+              { name: 'output-vol', emptyDir: {} },
+              {
+                name: 'maven-cache',
+                hostPath: {
+                  path: '/home/tulio/.m2-k3s-cache',
+                  type: 'DirectoryOrCreate'
+                }
+              }
             ]
           },
         },
