@@ -49,11 +49,22 @@ export class OrchestratorService {
                     name: 'output-vol',
                     mountPath: '/output',
                   },
+                  {
+                    name: 'maven-cache',
+                    mountPath: '/root/.m2'
+                  }
                 ],
               },
             ],
             volumes: [
-              { name: 'output-vol', emptyDir: {} }
+              { name: 'output-vol', emptyDir: {} },
+              {
+                name: 'maven-cache',
+                hostPath: {
+                  path: '/home/tulio/.m2-k3s-cache',
+                  type: 'DirectoryOrCreate'
+                }
+              }
             ]
           },
         },
