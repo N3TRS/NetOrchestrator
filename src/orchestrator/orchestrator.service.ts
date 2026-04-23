@@ -28,6 +28,7 @@ export class OrchestratorService {
       spec: {
         backoffLimit: 0,
         ttlSecondsAfterFinished: 600,
+        activeDeadlineSeconds: 750,
         template: {
           metadata: {
             labels: {
@@ -40,6 +41,16 @@ export class OrchestratorService {
               {
                 name: containerName,
                 image: `tulio3101/omni-maven-${runProjectDto.JAVA_VERSION}:v1`,
+                resources: {
+                  requests: {
+                    memory: "512Mi",
+                    cpu: "250m"
+                  },
+                  limits: {
+                    memory: "2.5Gi",
+                    cpu: "1500m"
+                  }
+                },
                 imagePullPolicy: 'Always',
                 args: [
                   runProjectDto.REPO_URL
