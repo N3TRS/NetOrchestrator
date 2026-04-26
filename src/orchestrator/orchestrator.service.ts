@@ -140,8 +140,8 @@ export class OrchestratorService {
       },
       spec: {
         backoffLimit: 0,
-        ttlSecondsAfterFinished: 600,
-        activeDeadlineSeconds: 750,
+        ttlSecondsAfterFinished: 120,
+        activeDeadlineSeconds: 2400,
         template: {
           metadata: {
             labels: {
@@ -213,9 +213,9 @@ export class OrchestratorService {
 
   async streamLogsToSocket(client: Socket, jobName: string): Promise<void> {
     const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
-    const log = new k8s.Log(this.kc);
+    let sentLines = 0;
 
-    const streamLogs = async () => {
+    const pollLogs = async () => {
       try {
         const pods = await coreApi.listNamespacedPod({
           namespace: 'default',
@@ -223,8 +223,7 @@ export class OrchestratorService {
         });
 
         if (!pods.items || pods.items.length === 0) {
-          console.log("Pod not yet");
-          setTimeout(() => streamLogs(), 3500);
+          setTimeout(() => pollLogs(), 3500);
           return;
         }
 
@@ -233,59 +232,63 @@ export class OrchestratorService {
         const containerName = pod.spec?.containers?.[0]?.name;
 
         if (!podName || !containerName) {
-          setTimeout(() => streamLogs(), 1500);
+          setTimeout(() => pollLogs(), 1500);
           return;
         }
 
         const phase = pod.status?.phase;
 
         if (phase === 'Pending') {
-          setTimeout(() => streamLogs(), 2000);
+          setTimeout(() => pollLogs(), 2000);
           return;
         }
 
-        if (phase === 'Running') {
+        const containerRunning = pod.status?.containerStatuses?.[0]?.state?.running;
+        if (phase === 'Running' && !containerRunning) {
+          setTimeout(() => pollLogs(), 2000);
+          return;
+        }
+
+        if (phase === 'Running' || phase === 'Succeeded' || phase === 'Failed') {
           try {
-            await log.log(
-              'default',
-              podName,
-              containerName,
-              {
-                write: (chunk: Buffer) => {
-                  client.emit('logs:data', chunk.toString());
-                },
-              } as any,
-              {
-                follow: true, timestamps: false
-              }
-            );
-            client.emit('logs:complete');
-          } catch (error) {
-            console.error('Error streaming live logs: ', error?.message);
-            setTimeout(() => streamLogs(), 1000);
+            const logs = await coreApi.readNamespacedPodLog({
+              name: podName,
+              namespace: 'default',
+              container: containerName,
+              follow: false,
+            });
+
+            const lines = (logs ?? '').split('\n');
+            const newLines = lines.slice(sentLines);
+            newLines.forEach(line => {
+              if (line) client.emit('logs:data', line);
+            });
+            sentLines = lines.length;
+
+            if (phase === 'Running') {
+              setTimeout(() => pollLogs(), 2000);
+            } else {
+              client.emit('logs:complete');
+            }
+          } catch (logError) {
+            console.error('Error reading pod logs:', logError?.message);
+            if (phase === 'Running') {
+              setTimeout(() => pollLogs(), 2000);
+            } else {
+              client.emit('logs:error', { message: `Error reading logs: ${logError?.message}` });
+            }
           }
           return;
         }
-        try {
-          const logsReponse = await coreApi.readNamespacedPodLog({
-            name: podName,
-            namespace: 'default',
-            container: containerName,
-            follow: false,
-          });
-          client.emit('logs:data', logsReponse);
-          client.emit('logs:complete');
-        } catch (logError) {
-          console.error('Error reading final logs: ', logError?.message);
-          client.emit('logs:error', { message: `Error reading logs: ${logError?.message}` });
-        }
+
+        client.emit('logs:error', { message: `Unexpected pod phase: ${phase}` });
       } catch (error) {
-        console.error('Log streaming error message:', error?.message);
-        client.emit('logs:error', { message: error?.message || 'Unknown error ' });
+        console.error('Log polling error:', error?.message);
+        client.emit('logs:error', { message: error?.message || 'Unknown error' });
       }
     };
 
-    streamLogs();
+    pollLogs();
 
   }
 
