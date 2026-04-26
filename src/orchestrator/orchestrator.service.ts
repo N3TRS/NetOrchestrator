@@ -3,6 +3,7 @@ import * as k8s from "@kubernetes/client-node";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
 import { Socket } from 'socket.io';
 import { JavaOrchestratorDto } from "./dto/java-orchestrator.dto";
+import { ClearJobDto } from "./dto/clear-job-orchestrator.dto";
 
 @Injectable()
 export class OrchestratorService {
@@ -14,6 +15,25 @@ export class OrchestratorService {
     this.kc.loadFromFile("/home/tulio/.kube/config");
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
   }
+
+  async clearJob(clearJobDto: ClearJobDto) {
+    try {
+      await this.batchApi.deleteNamespacedJob({
+        name: clearJobDto.jobName,
+        namespace: 'default',
+        body: {
+          propagationPolicy: 'Background',
+        },
+      });
+      return { message: 'Job deleted', jobName: clearJobDto.jobName };
+    } catch (error: any) {
+      if (error?.statusCode === 404 || error?.body?.code === 404) {
+        return { message: 'Job not found (already deleted)', jobName: clearJobDto.jobName };
+      }
+      throw error;
+    }
+  }
+
 
   async javaVersion(javaDto: JavaOrchestratorDto) {
     const jobName = `java-version-generator-${Date.now()}`;
