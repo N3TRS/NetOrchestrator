@@ -3,7 +3,7 @@ import { OrchestratorService } from "./orchestrator.service";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
 import { JavaOrchestratorDto } from "./dto/java-orchestrator.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
-
+import { ClearJobDto } from "./dto/clear-job-orchestrator.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("orchestrator")
@@ -26,6 +26,11 @@ export class OrchestratorController {
       }
       throw new HttpException({ message: 'Could not detect Java version', detail: msg }, 422);
     }
+  }
+
+  @Post("clear")
+  async clearJobs(@Body() clearJobDto: ClearJobDto) {
+    return await this.orchestratorService.clearJob(clearJobDto);
   }
 
 
