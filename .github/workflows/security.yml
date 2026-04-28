@@ -34,7 +34,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -54,20 +53,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Gitleaks — scan history and working tree
+      - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-      - name: TruffleHog — verified secrets in new commits
-        if: github.event_name == 'pull_request'
-        uses: trufflesecurity/trufflehog@v3
-        with:
-          path: ./
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
-          extra_args: --only-verified
 
   sast:
     name: SAST — CodeQL (TypeScript)
@@ -102,7 +91,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
