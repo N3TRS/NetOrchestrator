@@ -1,8 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import * as k8s from "@kubernetes/client-node";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
-import { Observable } from 'rxjs';
-
+import { Socket } from 'socket.io';
+import { JavaOrchestratorDto } from "./dto/java-orchestrator.dto";
+import { ClearJobDto } from "./dto/clear-job-orchestrator.dto";
 
 @Injectable()
 export class OrchestratorService {
@@ -14,6 +15,137 @@ export class OrchestratorService {
     this.kc.loadFromFile("/home/tulio/.kube/config");
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
   }
+
+  async clearJob(clearJobDto: ClearJobDto) {
+    try {
+      await this.batchApi.deleteNamespacedJob({
+        name: clearJobDto.jobName,
+        namespace: 'default',
+        body: {
+          propagationPolicy: 'Background',
+        },
+      });
+      return { message: 'Job deleted', jobName: clearJobDto.jobName };
+    } catch (error: any) {
+      if (error?.statusCode === 404 || error?.body?.code === 404) {
+        return { message: 'Job not found (already deleted)', jobName: clearJobDto.jobName };
+      }
+      throw error;
+    }
+  }
+
+
+  async javaVersion(javaDto: JavaOrchestratorDto) {
+    const jobName = `java-version-generator-${Date.now()}`;
+    const containerName = 'java-runner';
+
+    const deployment: k8s.V1Job = {
+      apiVersion: 'batch/v1',
+      kind: 'Job',
+      metadata: {
+        name: jobName,
+      },
+      spec: {
+        backoffLimit: 0,
+        ttlSecondsAfterFinished: 10,
+        activeDeadlineSeconds: 25,
+        template: {
+          metadata: {
+            labels: {
+              job: jobName,
+            },
+          },
+          spec: {
+            restartPolicy: 'Never',
+            containers: [
+              {
+                name: containerName,
+                image: `tulio3101/omni-java:latest`,
+                resources: {
+                  requests: {
+                    memory: "512Mi",
+                    cpu: "250m",
+                  },
+                  limits: {
+                    memory: "2.5Gi",
+                    cpu: "1500m"
+                  }
+                },
+                imagePullPolicy: 'Always',
+                args: [
+                  javaDto.REPO_URL
+                ],
+                volumeMounts: [
+                  {
+                    name: 'output-java',
+                    mountPath: '/java',
+                  }
+                ],
+              },
+            ],
+            volumes: [
+              {
+                name: 'output-java',
+                emptyDir: {}
+              }
+            ]
+          },
+        },
+      },
+    };
+
+    await this.batchApi.createNamespacedJob({
+      namespace: 'default',
+      body: deployment,
+    });
+
+    const output = await this.waitForJobOutput(jobName, 30_000);
+
+    return { javaVersion: output };
+  }
+
+  private async waitForJobOutput(jobName: string, timeoutMs: number): Promise<string> {
+    const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const pods = await coreApi.listNamespacedPod({
+        namespace: 'default',
+        labelSelector: `job-name=${jobName}`
+      });
+
+      if (!pods.items || pods.items.length === 0) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+
+      const pod = pods.items[0];
+      const podName = pod.metadata?.name;
+      const containerName = pod.spec?.containers?.[0]?.name;
+      const phase = pod.status?.phase;
+
+      if (phase === 'Pending' || phase === 'Running' || !podName || !containerName) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+
+      const logs = await coreApi.readNamespacedPodLog({
+        name: podName,
+        namespace: 'default',
+        container: containerName,
+        follow: false,
+      });
+
+      if (phase === 'Failed') {
+        throw new Error(logs?.trim() || 'Job failed with no output');
+      }
+
+      return logs?.trim() ?? '';
+    }
+
+    throw new Error('Timeout waiting for java version job');
+  }
+
 
   async runningProject(runProjectDto: CreateRunOrchestratorDto) {
 
@@ -29,6 +161,7 @@ export class OrchestratorService {
       spec: {
         backoffLimit: 0,
         ttlSecondsAfterFinished: 120,
+        activeDeadlineSeconds: 2400,
         template: {
           metadata: {
             labels: {
@@ -40,7 +173,17 @@ export class OrchestratorService {
             containers: [
               {
                 name: containerName,
-                image: 'tulio3101/omni-maven:v3',
+                image: `tulio3101/omni-maven-${runProjectDto.JAVA_VERSION}:latest`,
+                resources: {
+                  requests: {
+                    memory: "512Mi",
+                    cpu: "250m"
+                  },
+                  limits: {
+                    memory: "2.5Gi",
+                    cpu: "1500m"
+                  }
+                },
                 imagePullPolicy: 'Always',
                 args: [
                   runProjectDto.REPO_URL
@@ -50,11 +193,22 @@ export class OrchestratorService {
                     name: 'output-vol',
                     mountPath: '/output',
                   },
+                  {
+                    name: 'maven-cache',
+                    mountPath: '/root/.m2'
+                  }
                 ],
               },
             ],
             volumes: [
-              { name: 'output-vol', emptyDir: {} }
+              { name: 'output-vol', emptyDir: {} },
+              {
+                name: 'maven-cache',
+                hostPath: {
+                  path: '/home/tulio/.m2-k3s-cache',
+                  type: 'DirectoryOrCreate'
+                }
+              }
             ]
           },
         },
@@ -77,84 +231,85 @@ export class OrchestratorService {
     }
   }
 
-  getJobLogs(jobName: string): Observable<MessageEvent> {
-    return new Observable((observer) => {
-      const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
-      const log = new k8s.Log(this.kc);
+  async streamLogsToSocket(client: Socket, jobName: string): Promise<void> {
+    const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+    let sentLines = 0;
 
-      const streamLogs = async () => {
-        try {
-          const pods = await coreApi.listNamespacedPod({
-            namespace: 'default',
-            labelSelector: `job-name=${jobName}`
-          });
+    const pollLogs = async () => {
+      try {
+        const pods = await coreApi.listNamespacedPod({
+          namespace: 'default',
+          labelSelector: `job-name=${jobName}`
+        });
 
+        if (!pods.items || pods.items.length === 0) {
+          setTimeout(() => pollLogs(), 3500);
+          return;
+        }
 
-          if (!pods.items || pods.items.length === 0) {
-            console.log("Pod not yet");
-            setTimeout(() => streamLogs(), 3500);
-            return;
-          }
+        const pod = pods.items[0];
+        const podName = pod.metadata?.name;
+        const containerName = pod.spec?.containers?.[0]?.name;
 
-          const pod = pods.items[0];
-          const podName = pod.metadata?.name;
-          const containerName = pod.spec?.containers?.[0]?.name;
+        if (!podName || !containerName) {
+          setTimeout(() => pollLogs(), 1500);
+          return;
+        }
 
-          if (!podName || !containerName) {
-            setTimeout(() => streamLogs(), 1500);
-            return;
-          }
+        const phase = pod.status?.phase;
 
-          const phase = pod.status?.phase;
+        if (phase === 'Pending') {
+          setTimeout(() => pollLogs(), 2000);
+          return;
+        }
 
-          if (phase === 'Pending') {
-            setTimeout(() => streamLogs(), 2000);
-            return;
-          }
+        const containerRunning = pod.status?.containerStatuses?.[0]?.state?.running;
+        if (phase === 'Running' && !containerRunning) {
+          setTimeout(() => pollLogs(), 2000);
+          return;
+        }
 
-          if (phase === 'Running') {
-            try {
-              await log.log(
-                'default',
-                podName,
-                containerName,
-                {
-                  write: (chunk: Buffer) => {
-                    observer.next({ data: chunk.toString() } as MessageEvent);
-                  },
-                } as any,
-                { follow: true, timestamps: false }
-              );
-              observer.complete();
-            } catch {
-              setTimeout(() => streamLogs(), 1000);
-            }
-            return;
-          }
+        if (phase === 'Running' || phase === 'Succeeded' || phase === 'Failed') {
           try {
-            const logsResponse = await coreApi.readNamespacedPodLog({
+            const logs = await coreApi.readNamespacedPodLog({
               name: podName,
               namespace: 'default',
               container: containerName,
               follow: false,
             });
-            observer.next({ data: logsResponse } as MessageEvent);
-            observer.complete();
+
+            const lines = (logs ?? '').split('\n');
+            const newLines = lines.slice(sentLines);
+            newLines.forEach(line => {
+              if (line) client.emit('logs:data', line);
+            });
+            sentLines = lines.length;
+
+            if (phase === 'Running') {
+              setTimeout(() => pollLogs(), 2000);
+            } else {
+              client.emit('logs:complete');
+            }
           } catch (logError) {
-            console.error('Error reading final logs: ', logError?.message);
-            observer.next({ data: `[ERROR reading logs] ${logError?.message}` } as MessageEvent);
-            observer.complete();
+            console.error('Error reading pod logs:', logError?.message);
+            if (phase === 'Running') {
+              setTimeout(() => pollLogs(), 2000);
+            } else {
+              client.emit('logs:error', { message: `Error reading logs: ${logError?.message}` });
+            }
           }
-        } catch (error) {
-          console.error('Log streaming error message:', error?.message);
-          observer.next({ data: `[ERROR] ${error.message}` } as MessageEvent);
-          observer.complete();
+          return;
         }
-      };
 
-      streamLogs();
+        client.emit('logs:error', { message: `Unexpected pod phase: ${phase}` });
+      } catch (error) {
+        console.error('Log polling error:', error?.message);
+        client.emit('logs:error', { message: error?.message || 'Unknown error' });
+      }
+    };
 
-    });
+    pollLogs();
+
   }
 
 }
