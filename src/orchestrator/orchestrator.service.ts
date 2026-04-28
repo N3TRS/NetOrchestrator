@@ -12,7 +12,7 @@ export class OrchestratorService {
 
   constructor() {
     this.kc = new k8s.KubeConfig();
-    this.kc.loadFromFile("/home/tulio/.kube/config");
+    this.kc.loadFromDefault();
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
   }
 

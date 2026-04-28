@@ -1,0 +1,46 @@
+title = "NetOrchestrator Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist para falsos positivos conocidos"
+paths = [
+  '''^dist/''',
+  '''^pnpm-lock\\.yaml$''',
+  '''^\.env\.example$''',
+]
+regexes = [
+  # pnpm workspace override ranges usan caracteres que disparan reglas genéricas
+  '''>=\d+\.\d+\.\d+''',
+]
+
+[[rules]]
+id = "jwt-secret-env"
+description = "Detects JWT_SECRET with a real value in source files or env files"
+regex = '''(?i)(jwt[_-]?secret)\s*[=:]\s*["']?[A-Za-z0-9!@#$%^&*()_+\-=]{16,}["']?'''
+tags = ["jwt", "secret", "credential"]
+severity = "CRITICAL"
+
+  [rules.allowlist]
+  description = "Allow JWT_SECRET references without values (docs, examples, templates)"
+  regexes = [
+    '''(?i)jwt[_-]?secret\s*[=:]\s*["']?\s*["']?$''',
+    '''(?i)jwt[_-]?secret\s*[=:]\s*["']?<[^>]+>["']?''',
+  ]
+  paths = [
+    '''^\.env\.example$''',
+    '''README''',
+  ]
+
+[[rules]]
+id = "kubeconfig-hardcoded-path"
+description = "Hardcoded absolute path to kubeconfig file"
+regex = '''loadFromFile\s*\(\s*["']/[^"']+\.kube/config["']'''
+tags = ["kubernetes", "infrastructure"]
+severity = "MEDIUM"
+
+  [rules.allowlist]
+  paths = [
+    '''^src/orchestrator/orchestrator\\.service\\.ts$''',
+  ]
