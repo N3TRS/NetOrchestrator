@@ -63,28 +63,14 @@ jobs:
         run: gitleaks detect --source . --config .gitleaks.toml --verbose
 
   sast:
-    name: SAST — CodeQL (TypeScript)
+    name: SAST — ESLint Security
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      security-events: write
-      actions: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-          queries: security-extended
-          config: |
-            paths-ignore:
-              - dist/**
-              - node_modules/**
-              - "**/*.spec.ts"
-              - "**/*.e2e-spec.ts"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -99,12 +85,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build TypeScript
-        run: pnpm run build
-        continue-on-error: true
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: /language:javascript-typescript
-          upload: true
+      - name: Run ESLint security analysis
+        run: pnpm lint:security

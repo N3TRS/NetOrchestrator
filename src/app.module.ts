@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { OrchestratorModule } from './orchestrator/orchestrator.module';
+import { Module } from "@nestjs/common";
+import { OrchestratorModule } from "./orchestrator/orchestrator.module";
 
 @Module({
-  imports: [OrchestratorModule]
+  imports: [OrchestratorModule],
 })
-export class AppModule { }
+export class AppModule {}
