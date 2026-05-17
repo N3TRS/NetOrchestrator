@@ -1,7 +1,10 @@
+packages:
+  - '.'
+
 overrides:
   '@nestjs/core@<=11.1.17': '>=11.1.18'
   ajv@>=7.0.0-alpha.0 <8.18.0: '>=8.18.0'
-  brace-expansion@<1.1.13: '>=1.1.13'
+  brace-expansion@<1.1.13: '^1.1.13'
   brace-expansion@>=2.0.0 <2.0.3: '>=2.0.3'
   brace-expansion@>=4.0.0 <5.0.5: '>=5.0.5'
   file-type@>=13.0.0 <21.3.1: '>=21.3.1'

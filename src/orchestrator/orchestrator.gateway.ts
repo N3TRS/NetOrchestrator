@@ -1,18 +1,25 @@
-import { WebSocketGateway, SubscribeMessage, ConnectedSocket, MessageBody, OnGatewayConnection } from "@nestjs/websockets";
-import { Socket } from 'socket.io'
+import {
+  WebSocketGateway,
+  SubscribeMessage,
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+} from "@nestjs/websockets";
+import { Socket } from "socket.io";
 import { JwtService } from "@nestjs/jwt";
 import { OrchestratorService } from "./orchestrator.service";
 
-@WebSocketGateway({ path: '/orchestrator/socket.io' })
+@WebSocketGateway({ path: "/orchestrator/socket.io" })
 export class OrchestratorGateway implements OnGatewayConnection {
   constructor(
     private readonly orchestratorService: OrchestratorService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token
-      ?? client.handshake.headers?.authorization?.replace('Bearer ', '');
+    const token =
+      client.handshake.auth?.token ??
+      client.handshake.headers?.authorization?.replace("Bearer ", "");
 
     if (!token) {
       client.disconnect();
@@ -26,7 +33,7 @@ export class OrchestratorGateway implements OnGatewayConnection {
     }
   }
 
-  @SubscribeMessage('logs')
+  @SubscribeMessage("logs")
   async handleLogsRequest(
     @ConnectedSocket() client: Socket,
     @MessageBody() jobName: string,
@@ -34,9 +41,8 @@ export class OrchestratorGateway implements OnGatewayConnection {
     await this.orchestratorService.streamLogsToSocket(client, jobName);
   }
 
-  @SubscribeMessage('disconnect')
+  @SubscribeMessage("disconnect")
   handleDisconnect(@ConnectedSocket() client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
   }
-
 }

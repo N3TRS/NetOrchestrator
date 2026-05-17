@@ -14,4 +14,4 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
   controllers: [OrchestratorController],
   providers: [OrchestratorService, OrchestratorGateway, JwtAuthGuard],
 })
-export class OrchestratorModule { }
+export class OrchestratorModule {}
