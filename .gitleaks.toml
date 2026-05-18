@@ -42,5 +42,5 @@ severity = "MEDIUM"
 
   [rules.allowlist]
   paths = [
-    '''^src/orchestrator/orchestrator\\.service\\.ts$''',
+    '''^src/orchestrator/orchestrator\.service\.ts$''',
   ]
