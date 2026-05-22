@@ -1,5 +1,5 @@
 import { Test } from "@nestjs/testing";
-import { of } from "rxjs";
+import { of, throwError } from "rxjs";
 import { MetricsInterceptor } from "./metrics.interceptor";
 import { MetricsService } from "./metrics.service";
 
@@ -82,6 +82,20 @@ describe("MetricsInterceptor", () => {
       method: "POST",
       status: 200,
       route: "/orchestrator/java",
+    });
+  });
+
+  it("stops the timer and does not increment counter on handler error", (done) => {
+    const ctx = makeContext("/orchestrator/run", "POST") as any;
+    const errorHandler = { handle: () => throwError(() => new Error("boom")) };
+
+    interceptor.intercept(ctx, errorHandler as any).subscribe({
+      error: (e: Error) => {
+        expect(e.message).toBe("boom");
+        expect(mockEnd).toHaveBeenCalled();
+        expect(mockInc).not.toHaveBeenCalled();
+        done();
+      },
     });
   });
 });
