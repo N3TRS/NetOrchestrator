@@ -5,15 +5,85 @@ import { Socket } from "socket.io";
 import { JavaOrchestratorDto } from "./dto/java-orchestrator.dto";
 import { ClearJobDto } from "./dto/clear-job-orchestrator.dto";
 
+interface JobPodInfo {
+  pod: k8s.V1Pod;
+  podName: string;
+  containerName: string;
+  phase: string | undefined;
+}
+
 @Injectable()
 export class OrchestratorService {
   private kc: k8s.KubeConfig;
   private batchApi: k8s.BatchV1Api;
+  private coreApi: k8s.CoreV1Api;
+
+  private static readonly JOB_RESOURCES: k8s.V1ResourceRequirements = {
+    requests: { memory: "512Mi", cpu: "250m" },
+    limits: { memory: "2.5Gi", cpu: "1500m" },
+  };
 
   constructor() {
     this.kc = new k8s.KubeConfig();
     this.kc.loadFromDefault();
     this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
+    this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+  }
+
+  private buildJob(params: {
+    jobName: string;
+    containerName: string;
+    image: string;
+    args: string[];
+    volumeMounts: k8s.V1VolumeMount[];
+    volumes: k8s.V1Volume[];
+    ttlSecondsAfterFinished: number;
+    activeDeadlineSeconds: number;
+  }): k8s.V1Job {
+    return {
+      apiVersion: "batch/v1",
+      kind: "Job",
+      metadata: { name: params.jobName },
+      spec: {
+        backoffLimit: 0,
+        ttlSecondsAfterFinished: params.ttlSecondsAfterFinished,
+        activeDeadlineSeconds: params.activeDeadlineSeconds,
+        template: {
+          metadata: { labels: { job: params.jobName } },
+          spec: {
+            restartPolicy: "Never",
+            containers: [
+              {
+                name: params.containerName,
+                image: params.image,
+                resources: OrchestratorService.JOB_RESOURCES,
+                imagePullPolicy: "Always",
+                args: params.args,
+                volumeMounts: params.volumeMounts,
+              },
+            ],
+            volumes: params.volumes,
+          },
+        },
+      },
+    };
+  }
+
+  private async fetchJobPod(jobName: string): Promise<JobPodInfo | null> {
+    const pods = await this.coreApi.listNamespacedPod({
+      namespace: "default",
+      labelSelector: `job-name=${jobName}`,
+    });
+
+    if (!pods.items || pods.items.length === 0) return null;
+
+    const pod = pods.items[0];
+    const podName = pod.metadata?.name;
+    const containerName = pod.spec?.containers?.[0]?.name;
+
+    if (!podName || !containerName) return null;
+
+    return { pod, podName, containerName, phase: pod.status?.phase };
   }
 
   async clearJob(clearJobDto: ClearJobDto) {
@@ -39,60 +109,17 @@ export class OrchestratorService {
 
   async javaVersion(javaDto: JavaOrchestratorDto) {
     const jobName = `java-version-generator-${Date.now()}`;
-    const containerName = "java-runner";
 
-    const deployment: k8s.V1Job = {
-      apiVersion: "batch/v1",
-      kind: "Job",
-      metadata: {
-        name: jobName,
-      },
-      spec: {
-        backoffLimit: 0,
-        ttlSecondsAfterFinished: 10,
-        activeDeadlineSeconds: 25,
-        template: {
-          metadata: {
-            labels: {
-              job: jobName,
-            },
-          },
-          spec: {
-            restartPolicy: "Never",
-            containers: [
-              {
-                name: containerName,
-                image: `tulio3101/omni-java:latest`,
-                resources: {
-                  requests: {
-                    memory: "512Mi",
-                    cpu: "250m",
-                  },
-                  limits: {
-                    memory: "2.5Gi",
-                    cpu: "1500m",
-                  },
-                },
-                imagePullPolicy: "Always",
-                args: [javaDto.REPO_URL],
-                volumeMounts: [
-                  {
-                    name: "output-java",
-                    mountPath: "/java",
-                  },
-                ],
-              },
-            ],
-            volumes: [
-              {
-                name: "output-java",
-                emptyDir: {},
-              },
-            ],
-          },
-        },
-      },
-    };
+    const deployment = this.buildJob({
+      jobName,
+      containerName: "java-runner",
+      image: "tulio3101/omni-java:latest",
+      args: [javaDto.REPO_URL],
+      volumeMounts: [{ name: "output-java", mountPath: "/java" }],
+      volumes: [{ name: "output-java", emptyDir: {} }],
+      ttlSecondsAfterFinished: 10,
+      activeDeadlineSeconds: 25,
+    });
 
     await this.batchApi.createNamespacedJob({
       namespace: "default",
@@ -108,36 +135,24 @@ export class OrchestratorService {
     jobName: string,
     timeoutMs: number,
   ): Promise<string> {
-    const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
-      const pods = await coreApi.listNamespacedPod({
-        namespace: "default",
-        labelSelector: `job-name=${jobName}`,
-      });
+      const info = await this.fetchJobPod(jobName);
 
-      if (!pods.items || pods.items.length === 0) {
+      if (!info) {
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
 
-      const pod = pods.items[0];
-      const podName = pod.metadata?.name;
-      const containerName = pod.spec?.containers?.[0]?.name;
-      const phase = pod.status?.phase;
+      const { podName, containerName, phase } = info;
 
-      if (
-        phase === "Pending" ||
-        phase === "Running" ||
-        !podName ||
-        !containerName
-      ) {
+      if (phase === "Pending" || phase === "Running") {
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
 
-      const logs = await coreApi.readNamespacedPodLog({
+      const logs = await this.coreApi.readNamespacedPodLog({
         name: podName,
         namespace: "default",
         container: containerName,
@@ -156,120 +171,61 @@ export class OrchestratorService {
 
   async runningProject(runProjectDto: CreateRunOrchestratorDto) {
     const jobName = `maven-generator-${Date.now()}`;
-    const containerName = "maven-runner";
 
-    const deployment: k8s.V1Job = {
-      apiVersion: "batch/v1",
-      kind: "Job",
-      metadata: {
-        name: jobName,
-      },
-      spec: {
-        backoffLimit: 0,
-        ttlSecondsAfterFinished: 120,
-        activeDeadlineSeconds: 2400,
-        template: {
-          metadata: {
-            labels: {
-              job: jobName,
-            },
-          },
-          spec: {
-            restartPolicy: "Never",
-            containers: [
-              {
-                name: containerName,
-                image: `tulio3101/omni-maven-${runProjectDto.JAVA_VERSION}:latest`,
-                resources: {
-                  requests: {
-                    memory: "512Mi",
-                    cpu: "250m",
-                  },
-                  limits: {
-                    memory: "2.5Gi",
-                    cpu: "1500m",
-                  },
-                },
-                imagePullPolicy: "Always",
-                args: [runProjectDto.REPO_URL],
-                volumeMounts: [
-                  {
-                    name: "output-vol",
-                    mountPath: "/output",
-                  },
-                  {
-                    name: "maven-cache",
-                    mountPath: "/root/.m2",
-                  },
-                ],
-              },
-            ],
-            volumes: [
-              { name: "output-vol", emptyDir: {} },
-              {
-                name: "maven-cache",
-                hostPath: {
-                  path: "/home/tulio/.m2-k3s-cache",
-                  type: "DirectoryOrCreate",
-                },
-              },
-            ],
+    const deployment = this.buildJob({
+      jobName,
+      containerName: "maven-runner",
+      image: `tulio3101/omni-maven-${runProjectDto.JAVA_VERSION}:latest`,
+      args: [runProjectDto.REPO_URL],
+      volumeMounts: [
+        { name: "output-vol", mountPath: "/output" },
+        { name: "maven-cache", mountPath: "/root/.m2" },
+      ],
+      volumes: [
+        { name: "output-vol", emptyDir: {} },
+        {
+          name: "maven-cache",
+          hostPath: {
+            path: "/home/tulio/.m2-k3s-cache",
+            type: "DirectoryOrCreate",
           },
         },
-      },
-    };
+      ],
+      ttlSecondsAfterFinished: 120,
+      activeDeadlineSeconds: 2400,
+    });
 
-    try {
-      const response = await this.batchApi.createNamespacedJob({
-        namespace: "default",
-        body: deployment,
-      });
+    await this.batchApi.createNamespacedJob({
+      namespace: "default",
+      body: deployment,
+    });
 
-      return {
-        message: "Job created",
-        jobName: jobName,
-      };
-    } catch (error) {
-      throw error;
-    }
+    return { message: "Job created", jobName };
   }
 
-  async streamLogsToSocket(client: Socket, jobName: string): Promise<void> {
-    const coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+  streamLogsToSocket(client: Socket, jobName: string): void {
     let sentLines = 0;
 
     const pollLogs = async () => {
       try {
-        const pods = await coreApi.listNamespacedPod({
-          namespace: "default",
-          labelSelector: `job-name=${jobName}`,
-        });
+        const info = await this.fetchJobPod(jobName);
 
-        if (!pods.items || pods.items.length === 0) {
-          setTimeout(() => pollLogs(), 3500);
+        if (!info) {
+          setTimeout(() => void pollLogs(), 3500);
           return;
         }
 
-        const pod = pods.items[0];
-        const podName = pod.metadata?.name;
-        const containerName = pod.spec?.containers?.[0]?.name;
-
-        if (!podName || !containerName) {
-          setTimeout(() => pollLogs(), 1500);
-          return;
-        }
-
-        const phase = pod.status?.phase;
+        const { podName, containerName, phase } = info;
 
         if (phase === "Pending") {
-          setTimeout(() => pollLogs(), 2000);
+          setTimeout(() => void pollLogs(), 2000);
           return;
         }
 
         const containerRunning =
-          pod.status?.containerStatuses?.[0]?.state?.running;
+          info.pod.status?.containerStatuses?.[0]?.state?.running;
         if (phase === "Running" && !containerRunning) {
-          setTimeout(() => pollLogs(), 2000);
+          setTimeout(() => void pollLogs(), 2000);
           return;
         }
 
@@ -279,7 +235,7 @@ export class OrchestratorService {
           phase === "Failed"
         ) {
           try {
-            const logs = await coreApi.readNamespacedPodLog({
+            const logs = await this.coreApi.readNamespacedPodLog({
               name: podName,
               namespace: "default",
               container: containerName,
@@ -294,14 +250,14 @@ export class OrchestratorService {
             sentLines = lines.length;
 
             if (phase === "Running") {
-              setTimeout(() => pollLogs(), 2000);
+              setTimeout(() => void pollLogs(), 2000);
             } else {
               client.emit("logs:complete");
             }
           } catch (logError) {
             console.error("Error reading pod logs:", logError?.message);
             if (phase === "Running") {
-              setTimeout(() => pollLogs(), 2000);
+              setTimeout(() => void pollLogs(), 2000);
             } else {
               client.emit("logs:error", {
                 message: `Error reading logs: ${logError?.message}`,
@@ -322,6 +278,6 @@ export class OrchestratorService {
       }
     };
 
-    pollLogs();
+    void pollLogs();
   }
 }

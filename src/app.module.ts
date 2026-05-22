@@ -1,9 +1,9 @@
-import { Module } from '@nestjs/common';
-import { OrchestratorModule } from './orchestrator/orchestrator.module';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { MetricsService } from './metrics/metrics.service';
-import { MetricsController } from './metrics/metrics.controller';
-import { MetricsInterceptor } from './metrics/metrics.interceptor';
+import { Module } from "@nestjs/common";
+import { OrchestratorModule } from "./orchestrator/orchestrator.module";
+import { APP_INTERCEPTOR } from "@nestjs/core";
+import { MetricsService } from "./metrics/metrics.service";
+import { MetricsController } from "./metrics/metrics.controller";
+import { MetricsInterceptor } from "./metrics/metrics.interceptor";
 
 @Module({
   imports: [OrchestratorModule],
@@ -16,4 +16,4 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}
