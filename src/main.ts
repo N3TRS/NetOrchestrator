@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { NestFactory } from "@nestjs/core";
 import { OrchestratorModule } from "./orchestrator/orchestrator.module";
-import { ValidationPipe } from "@nestjs/common";
+import { Logger, ValidationPipe } from "@nestjs/common";
 
 async function bootstrap() {
   const app = await NestFactory.create(OrchestratorModule);
@@ -12,6 +12,6 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000, "0.0.0.0");
 }
 bootstrap().catch((err: unknown) => {
-  console.error("Fatal bootstrap error", err);
+  new Logger("Bootstrap").error("Fatal bootstrap error", err);
   process.exit(1);
 });
