@@ -5,12 +5,15 @@ import {
   MessageBody,
   OnGatewayConnection,
 } from "@nestjs/websockets";
+import { Logger } from "@nestjs/common";
 import { Socket } from "socket.io";
 import { JwtService } from "@nestjs/jwt";
 import { OrchestratorService } from "./orchestrator.service";
 
 @WebSocketGateway({ path: "/orchestrator/socket.io" })
 export class OrchestratorGateway implements OnGatewayConnection {
+  private readonly logger = new Logger(OrchestratorGateway.name);
+
   constructor(
     private readonly orchestratorService: OrchestratorService,
     private readonly jwtService: JwtService,
@@ -53,6 +56,6 @@ export class OrchestratorGateway implements OnGatewayConnection {
 
   @SubscribeMessage("disconnect")
   handleDisconnect(@ConnectedSocket() client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
+    this.logger.log(`Client disconnected: ${client.id}`);
   }
 }

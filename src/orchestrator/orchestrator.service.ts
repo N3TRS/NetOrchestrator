@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import * as k8s from "@kubernetes/client-node";
 import { CreateRunOrchestratorDto } from "./dto/create-run-orchestrator.dto";
 import { Socket } from "socket.io";
@@ -14,10 +14,12 @@ interface JobPodInfo {
 
 @Injectable()
 export class OrchestratorService {
+  private readonly logger = new Logger(OrchestratorService.name);
   private kc: k8s.KubeConfig;
   private batchApi: k8s.BatchV1Api;
   private coreApi: k8s.CoreV1Api;
 
+  private static readonly NAMESPACE = "default";
   private static readonly JOB_RESOURCES: k8s.V1ResourceRequirements = {
     requests: { memory: "512Mi", cpu: "250m" },
     limits: { memory: "2.5Gi", cpu: "1500m" },
@@ -71,7 +73,7 @@ export class OrchestratorService {
 
   private async fetchJobPod(jobName: string): Promise<JobPodInfo | null> {
     const pods = await this.coreApi.listNamespacedPod({
-      namespace: "default",
+      namespace: OrchestratorService.NAMESPACE,
       labelSelector: `job-name=${jobName}`,
     });
 
@@ -86,11 +88,15 @@ export class OrchestratorService {
     return { pod, podName, containerName, phase: pod.status?.phase };
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async clearJob(clearJobDto: ClearJobDto) {
     try {
       await this.batchApi.deleteNamespacedJob({
         name: clearJobDto.jobName,
-        namespace: "default",
+        namespace: OrchestratorService.NAMESPACE,
         body: {
           propagationPolicy: "Background",
         },
@@ -122,7 +128,7 @@ export class OrchestratorService {
     });
 
     await this.batchApi.createNamespacedJob({
-      namespace: "default",
+      namespace: OrchestratorService.NAMESPACE,
       body: deployment,
     });
 
@@ -141,20 +147,20 @@ export class OrchestratorService {
       const info = await this.fetchJobPod(jobName);
 
       if (!info) {
-        await new Promise((r) => setTimeout(r, 2000));
+        await this.sleep(2000);
         continue;
       }
 
       const { podName, containerName, phase } = info;
 
       if (phase === "Pending" || phase === "Running") {
-        await new Promise((r) => setTimeout(r, 2000));
+        await this.sleep(2000);
         continue;
       }
 
       const logs = await this.coreApi.readNamespacedPodLog({
         name: podName,
-        namespace: "default",
+        namespace: OrchestratorService.NAMESPACE,
         container: containerName,
         follow: false,
       });
@@ -196,7 +202,7 @@ export class OrchestratorService {
     });
 
     await this.batchApi.createNamespacedJob({
-      namespace: "default",
+      namespace: OrchestratorService.NAMESPACE,
       body: deployment,
     });
 
@@ -205,27 +211,29 @@ export class OrchestratorService {
 
   streamLogsToSocket(client: Socket, jobName: string): void {
     let sentLines = 0;
+    const reschedule = (delay = 2000) => setTimeout(() => void pollLogs(), delay);
 
     const pollLogs = async () => {
+      const emitError = (msg: string) => client.emit("logs:error", { message: msg });
       try {
         const info = await this.fetchJobPod(jobName);
 
         if (!info) {
-          setTimeout(() => void pollLogs(), 3500);
+          reschedule(3500);
           return;
         }
 
         const { podName, containerName, phase } = info;
 
         if (phase === "Pending") {
-          setTimeout(() => void pollLogs(), 2000);
+          reschedule();
           return;
         }
 
         const containerRunning =
           info.pod.status?.containerStatuses?.[0]?.state?.running;
         if (phase === "Running" && !containerRunning) {
-          setTimeout(() => void pollLogs(), 2000);
+          reschedule();
           return;
         }
 
@@ -237,7 +245,7 @@ export class OrchestratorService {
           try {
             const logs = await this.coreApi.readNamespacedPodLog({
               name: podName,
-              namespace: "default",
+              namespace: OrchestratorService.NAMESPACE,
               container: containerName,
               follow: false,
             });
@@ -250,31 +258,25 @@ export class OrchestratorService {
             sentLines = lines.length;
 
             if (phase === "Running") {
-              setTimeout(() => void pollLogs(), 2000);
+              reschedule();
             } else {
               client.emit("logs:complete");
             }
           } catch (logError) {
-            console.error("Error reading pod logs:", logError?.message);
+            this.logger.error(`Error reading pod logs: ${logError?.message}`);
             if (phase === "Running") {
-              setTimeout(() => void pollLogs(), 2000);
+              reschedule();
             } else {
-              client.emit("logs:error", {
-                message: `Error reading logs: ${logError?.message}`,
-              });
+              emitError(`Error reading logs: ${logError?.message}`);
             }
           }
           return;
         }
 
-        client.emit("logs:error", {
-          message: `Unexpected pod phase: ${phase}`,
-        });
+        emitError(`Unexpected pod phase: ${phase}`);
       } catch (error) {
-        console.error("Log polling error:", error?.message);
-        client.emit("logs:error", {
-          message: error?.message || "Unknown error",
-        });
+        this.logger.error(`Log polling error: ${error?.message}`);
+        emitError(error?.message || "Unknown error");
       }
     };
 

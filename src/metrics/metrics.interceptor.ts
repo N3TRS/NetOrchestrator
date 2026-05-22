@@ -4,8 +4,8 @@ import {
   ExecutionContext,
   CallHandler,
 } from "@nestjs/common";
-import { Observable } from "rxjs";
-import { tap } from "rxjs/operators";
+import { Observable, throwError } from "rxjs";
+import { tap, catchError } from "rxjs/operators";
 import { MetricsService } from "./metrics.service";
 
 @Injectable()
@@ -37,6 +37,10 @@ export class MetricsInterceptor implements NestInterceptor {
           status: res.statusCode,
           route: req.route?.path || req.url,
         });
+      }),
+      catchError((err: unknown) => {
+        end();
+        return throwError(() => err);
       }),
     );
   }
