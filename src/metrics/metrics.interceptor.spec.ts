@@ -1,5 +1,5 @@
 import { Test } from "@nestjs/testing";
-import { of } from "rxjs";
+import { of, throwError } from "rxjs";
 import { MetricsInterceptor } from "./metrics.interceptor";
 import { MetricsService } from "./metrics.service";
 
@@ -86,8 +86,6 @@ describe("MetricsInterceptor", () => {
   });
 
   it("stops the timer and does not increment counter on handler error", (done) => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { throwError } = require("rxjs");
     const ctx = makeContext("/orchestrator/run", "POST") as any;
     const errorHandler = { handle: () => throwError(() => new Error("boom")) };
 
