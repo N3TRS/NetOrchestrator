@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1779488327802" clover="3.2.0">
+  <project timestamp="1779488327802" name="All files">
+    <metrics statements="174" coveredstatements="153" conditionals="114" coveredconditionals="86" methods="33" coveredmethods="22" elements="321" coveredelements="261" complexity="0" loc="174" ncloc="174" packages="4" files="10" classes="10"/>
+    <package name="auth">
+      <metrics statements="14" coveredstatements="14" conditionals="8" coveredconditionals="7" methods="3" coveredmethods="3"/>
+      <file name="jwt-auth.guard.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/auth/jwt-auth.guard.ts">
+        <metrics statements="14" coveredstatements="14" conditionals="8" coveredconditionals="7" methods="3" coveredmethods="3"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="7" count="2" type="stmt"/>
+        <line num="11" count="2" type="stmt"/>
+        <line num="12" count="8" type="cond" truecount="3" falsecount="1"/>
+        <line num="15" count="4" type="stmt"/>
+        <line num="16" count="4" type="stmt"/>
+        <line num="18" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="20" count="3" type="stmt"/>
+        <line num="21" count="3" type="stmt"/>
+        <line num="23" count="2" type="stmt"/>
+        <line num="26" count="1" type="stmt"/>
+        <line num="30" count="8" type="stmt"/>
+        <line num="31" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="32" count="4" type="stmt"/>
+      </file>
+    </package>
+    <package name="metrics">
+      <metrics statements="27" coveredstatements="20" conditionals="17" coveredconditionals="10" methods="6" coveredmethods="4"/>
+      <file name="metrics.controller.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/metrics/metrics.controller.ts">
+        <metrics statements="7" coveredstatements="0" conditionals="4" coveredconditionals="0" methods="2" coveredmethods="0"/>
+        <line num="1" count="0" type="stmt"/>
+        <line num="3" count="0" type="stmt"/>
+        <line num="6" count="0" type="stmt"/>
+        <line num="7" count="0" type="cond" truecount="0" falsecount="4"/>
+        <line num="10" count="0" type="stmt"/>
+        <line num="11" count="0" type="stmt"/>
+        <line num="12" count="0" type="stmt"/>
+      </file>
+      <file name="metrics.interceptor.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/metrics/metrics.interceptor.ts">
+        <metrics statements="13" coveredstatements="13" conditionals="13" coveredconditionals="10" methods="3" coveredmethods="3"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="7" count="1" type="stmt"/>
+        <line num="8" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="13" count="4" type="cond" truecount="5" falsecount="0"/>
+        <line num="14" count="2" type="stmt"/>
+        <line num="17" count="2" type="stmt"/>
+        <line num="22" count="2" type="stmt"/>
+        <line num="24" count="2" type="stmt"/>
+        <line num="25" count="2" type="stmt"/>
+        <line num="26" count="2" type="stmt"/>
+      </file>
+      <file name="metrics.service.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/metrics/metrics.service.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="2" count="2" type="stmt"/>
+        <line num="5" count="2" type="stmt"/>
+        <line num="11" count="5" type="stmt"/>
+        <line num="14" count="5" type="stmt"/>
+        <line num="16" count="5" type="stmt"/>
+        <line num="23" count="5" type="stmt"/>
+      </file>
+    </package>
+    <package name="orchestrator">
+      <metrics statements="123" coveredstatements="109" conditionals="89" coveredconditionals="69" methods="24" coveredmethods="15"/>
+      <file name="orchestrator.controller.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/orchestrator/orchestrator.controller.ts">
+        <metrics statements="19" coveredstatements="19" conditionals="20" coveredconditionals="16" methods="4" coveredmethods="4"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="10" count="1" type="stmt"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="12" count="1" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="14" count="1" type="stmt"/>
+        <line num="18" count="1" type="stmt"/>
+        <line num="19" count="6" type="cond" truecount="3" falsecount="1"/>
+        <line num="22" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="27" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="28" count="5" type="stmt"/>
+        <line num="29" count="5" type="stmt"/>
+        <line num="31" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="32" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="2" type="stmt"/>
+        <line num="35" count="2" type="stmt"/>
+        <line num="43" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="44" count="1" type="stmt"/>
+      </file>
+      <file name="orchestrator.gateway.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/orchestrator/orchestrator.gateway.ts">
+        <metrics statements="18" coveredstatements="17" conditionals="20" coveredconditionals="16" methods="4" coveredmethods="3"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="8" count="1" type="stmt"/>
+        <line num="9" count="1" type="stmt"/>
+        <line num="10" count="1" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="15" count="6" type="cond" truecount="6" falsecount="2"/>
+        <line num="16" count="6" type="stmt"/>
+        <line num="21" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="24" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="25" count="1" type="stmt"/>
+        <line num="26" count="1" type="stmt"/>
+        <line num="29" count="4" type="stmt"/>
+        <line num="30" count="4" type="stmt"/>
+        <line num="32" count="1" type="stmt"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="41" count="1" type="stmt"/>
+        <line num="45" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="46" count="0" type="stmt"/>
+      </file>
+      <file name="orchestrator.service.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/orchestrator/orchestrator.service.ts">
+        <metrics statements="86" coveredstatements="73" conditionals="49" coveredconditionals="37" methods="16" coveredmethods="8"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="9" count="3" type="stmt"/>
+        <line num="14" count="18" type="stmt"/>
+        <line num="15" count="18" type="stmt"/>
+        <line num="16" count="18" type="stmt"/>
+        <line num="20" count="4" type="stmt"/>
+        <line num="21" count="4" type="stmt"/>
+        <line num="28" count="1" type="stmt"/>
+        <line num="30" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="31" count="2" type="stmt"/>
+        <line num="36" count="1" type="stmt"/>
+        <line num="41" count="5" type="stmt"/>
+        <line num="42" count="5" type="stmt"/>
+        <line num="44" count="5" type="stmt"/>
+        <line num="97" count="5" type="stmt"/>
+        <line num="102" count="5" type="stmt"/>
+        <line num="104" count="2" type="stmt"/>
+        <line num="111" count="5" type="stmt"/>
+        <line num="112" count="5" type="stmt"/>
+        <line num="114" count="5" type="stmt"/>
+        <line num="115" count="4" type="stmt"/>
+        <line num="120" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="121" count="0" type="stmt"/>
+        <line num="122" count="0" type="stmt"/>
+        <line num="125" count="4" type="stmt"/>
+        <line num="126" count="4" type="stmt"/>
+        <line num="127" count="4" type="stmt"/>
+        <line num="128" count="4" type="stmt"/>
+        <line num="130" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="136" count="0" type="stmt"/>
+        <line num="137" count="0" type="stmt"/>
+        <line num="140" count="4" type="stmt"/>
+        <line num="147" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="148" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="151" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="154" count="1" type="stmt"/>
+        <line num="158" count="4" type="stmt"/>
+        <line num="159" count="4" type="stmt"/>
+        <line num="161" count="4" type="stmt"/>
+        <line num="222" count="4" type="stmt"/>
+        <line num="223" count="4" type="stmt"/>
+        <line num="228" count="3" type="stmt"/>
+        <line num="233" count="1" type="stmt"/>
+        <line num="238" count="5" type="stmt"/>
+        <line num="239" count="5" type="stmt"/>
+        <line num="241" count="5" type="stmt"/>
+        <line num="242" count="5" type="stmt"/>
+        <line num="243" count="5" type="stmt"/>
+        <line num="248" count="4" type="cond" truecount="4" falsecount="0"/>
+        <line num="249" count="1" type="stmt"/>
+        <line num="250" count="1" type="stmt"/>
+        <line num="253" count="3" type="stmt"/>
+        <line num="254" count="3" type="stmt"/>
+        <line num="255" count="3" type="stmt"/>
+        <line num="257" count="3" type="cond" truecount="3" falsecount="1"/>
+        <line num="258" count="0" type="stmt"/>
+        <line num="259" count="0" type="stmt"/>
+        <line num="262" count="3" type="stmt"/>
+        <line num="264" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="265" count="0" type="stmt"/>
+        <line num="266" count="0" type="stmt"/>
+        <line num="270" count="3" type="stmt"/>
+        <line num="271" count="3" type="cond" truecount="2" falsecount="2"/>
+        <line num="272" count="0" type="stmt"/>
+        <line num="273" count="0" type="stmt"/>
+        <line num="276" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="281" count="3" type="stmt"/>
+        <line num="282" count="3" type="stmt"/>
+        <line num="289" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="290" count="2" type="stmt"/>
+        <line num="291" count="2" type="stmt"/>
+        <line num="292" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="294" count="2" type="stmt"/>
+        <line num="296" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="297" count="0" type="stmt"/>
+        <line num="299" count="2" type="stmt"/>
+        <line num="302" count="1" type="stmt"/>
+        <line num="303" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="304" count="0" type="stmt"/>
+        <line num="306" count="1" type="stmt"/>
+        <line num="311" count="3" type="stmt"/>
+        <line num="314" count="0" type="stmt"/>
+        <line num="318" count="1" type="stmt"/>
+        <line num="319" count="1" type="stmt"/>
+        <line num="325" count="5" type="stmt"/>
+      </file>
+    </package>
+    <package name="orchestrator.dto">
+      <metrics statements="10" coveredstatements="10" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+      <file name="clear-job-orchestrator.dto.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/orchestrator/dto/clear-job-orchestrator.dto.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="8" count="2" type="stmt"/>
+      </file>
+      <file name="create-run-orchestrator.dto.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/orchestrator/dto/create-run-orchestrator.dto.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="6" count="2" type="stmt"/>
+        <line num="13" count="2" type="stmt"/>
+      </file>
+      <file name="java-orchestrator.dto.ts" path="/home/tulio/Documents/Omni/NetOrchestrator/src/orchestrator/dto/java-orchestrator.dto.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="6" count="2" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>
