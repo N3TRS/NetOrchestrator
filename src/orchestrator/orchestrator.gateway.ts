@@ -16,29 +16,39 @@ export class OrchestratorGateway implements OnGatewayConnection {
     private readonly jwtService: JwtService,
   ) {}
 
-  handleConnection(client: Socket) {
+  private verifyToken(client: Socket): boolean {
+    const handshakeAuth = client.handshake.auth as { token?: string };
+    const handshakeHeaders = client.handshake.headers as {
+      authorization?: string;
+    };
     const token =
-      client.handshake.auth?.token ??
-      client.handshake.headers?.authorization?.replace("Bearer ", "");
-
-    if (!token) {
-      client.disconnect();
-      return;
-    }
-
+      handshakeAuth?.token ??
+      handshakeHeaders?.authorization?.replace("Bearer ", "");
+    if (!token) return false;
     try {
       this.jwtService.verify(token);
+      return true;
     } catch {
+      return false;
+    }
+  }
+
+  handleConnection(client: Socket) {
+    if (!this.verifyToken(client)) {
       client.disconnect();
     }
   }
 
   @SubscribeMessage("logs")
-  async handleLogsRequest(
+  handleLogsRequest(
     @ConnectedSocket() client: Socket,
     @MessageBody() jobName: string,
   ) {
-    await this.orchestratorService.streamLogsToSocket(client, jobName);
+    if (!this.verifyToken(client)) {
+      client.disconnect();
+      return;
+    }
+    this.orchestratorService.streamLogsToSocket(client, jobName);
   }
 
   @SubscribeMessage("disconnect")
